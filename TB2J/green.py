@@ -256,13 +256,20 @@ class TBGreen:
         calculate eigen values and vectors for all kpts and save.
         Note that the convention 2 is used here, where the
         phase factor is e^(ik.R), not e^(ik.(R+rj-ri))
+
+        H(k) of all k-points is only kept if saveH is True. Otherwise only its
+        k average H0 is accumulated, which avoids an array of the size of the
+        eigenvectors.
         """
         nkpts = len(self.kpts)
         self.evals = np.zeros((nkpts, self.nbasis), dtype=float)
         self.nkpts = nkpts
         self.H0 = np.zeros((self.nbasis, self.nbasis), dtype=complex)
         self.evecs = np.zeros((nkpts, self.nbasis, self.nbasis), dtype=complex)
-        self.H = np.zeros((nkpts, self.nbasis, self.nbasis), dtype=complex)
+        if saveH:
+            self.H = np.zeros((nkpts, self.nbasis, self.nbasis), dtype=complex)
+        else:
+            self.H = None
         if not self.is_orthogonal:
             self.S = np.zeros((nkpts, self.nbasis, self.nbasis), dtype=complex)
         else:
@@ -278,15 +285,14 @@ class TBGreen:
             executor.join()
             executor.clear()
 
-        for ik, result in enumerate(results):
-            if self.is_orthogonal:
-                self.H[ik], _, self.evals[ik], self.evecs[ik] = result
-            else:
-                self.H[ik], self.S[ik], self.evals[ik], self.evecs[ik] = result
-            self.H0 += self.H[ik] / self.nkpts
-
-        if not saveH:
-            self.H = None
+        for ik, (Hk, Sk, evals, evecs) in enumerate(results):
+            self.evals[ik] = evals
+            self.evecs[ik] = evecs
+            if not self.is_orthogonal:
+                self.S[ik] = Sk
+            if saveH:
+                self.H[ik] = Hk
+            self.H0 += Hk / self.nkpts
 
         # get efermi
         if self.efermi is None:
